@@ -255,7 +255,12 @@ class LDSORG(Plugin):
                                 u = node.find("a",{"type":"video/mp4"})['href']
                             except:
                                 pass
-                        self.add_link(thumb,{'Title':'%s - %s' % (speaker,talk)},{'name':'%s - %s' % (speaker,talk),'url':u,'mode':5},self.gcfanart)
+                        if u:
+                            title = "%s - %s" % (str(speaker),str(talk)) if talk and talk != "" else "%s" % str(speaker)
+                            self.add_link(thumb,{'Title':title},{'name':title,'url':u,'mode':5},self.gcfanart)
+                        speaker = None
+                        talk = None
+                        u = None
                         node = node.findNext('tr')
                     break
 
