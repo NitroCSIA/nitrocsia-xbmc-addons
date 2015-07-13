@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.ldsvideos" name="LDS Videos" version="0.0.2" provider-name="NitroCSIA@gmail.com">
+<addon id="plugin.video.ldsvideos" name="LDS Videos" version="1.0.0" provider-name="NitroCSIA@gmail.com">
     <requires>
         <import addon="xbmc.python" version="2.1.0"/>
         <import addon="script.module.beautifulsoup" version="3.0.8"/>
@@ -18,6 +18,6 @@
         <platform>all</platform>
         <summary lang="en">Videos from lds.org, byutv.org, and mormonchannel.org</summary>
         <description lang="en">Play LDS videos from the lds.org.  Play BYU-TV shows on demand and stream BYU-TV live.  Play Mormon Channel video and audio content.</description>
-        <disclaimer lang="en">Only has downloadable content from lds.org. Must have YouTube to play copyrighted content from Mormon Channel and BYU TV</disclaimer>
+        <disclaimer lang="en">Must have YouTube to play copyrighted content from Mormon Channel and BYU TV</disclaimer>
     </extension>
 </addon>

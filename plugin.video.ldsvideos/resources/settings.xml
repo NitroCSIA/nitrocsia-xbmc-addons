@@ -7,5 +7,8 @@
     </category>
     <!--category label="30002">
         <setting id="byu_quality" type="enum" lvalues="30003|30004|30005" label="30006" default="0"/>
-    </category-->    
+    </category--> 
+    <category label="30009">
+        <setting id="mc_language" type="enum" lvalues="30010|30011" label="30012" default="0"/>
+    </category>   
 </settings>

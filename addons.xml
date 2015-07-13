@@ -21,7 +21,7 @@
     </extension>
 </addon>
 
-<addon id="plugin.video.ldsvideos" name="LDS Videos" version="0.0.2" provider-name="NitroCSIA@gmail.com">
+<addon id="plugin.video.ldsvideos" name="LDS Videos" version="1.0.0" provider-name="NitroCSIA@gmail.com">
     <requires>
         <import addon="xbmc.python" version="2.1.0"/>
         <import addon="script.module.beautifulsoup" version="3.0.8"/>
@@ -40,20 +40,8 @@
         <platform>all</platform>
         <summary lang="en">Videos from lds.org, byutv.org, and mormonchannel.org</summary>
         <description lang="en">Play LDS videos from the lds.org.  Play BYU-TV shows on demand and stream BYU-TV live.  Play Mormon Channel video and audio content.</description>
-        <disclaimer lang="en">Only has downloadable content from lds.org. Must have YouTube to play copyrighted content from Mormon Channel and BYU TV</disclaimer>
+        <disclaimer lang="en">Must have YouTube to play copyrighted content from Mormon Channel and BYU TV</disclaimer>
     </extension>
 </addon>
 
-<addon id="repository.nitrocsia" name="NitroCSIA's XBMC Addons" version="1.0.1" provider-name="NitroCSIA">
-	<extension point="xbmc.addon.repository" name="NitroCSIA's XBMC Addon Repository">
-		<info compressed="false">https://raw.github.com/NitroCSIA/nitrocsia-xbmc-addons/master/addons.xml</info>
-		<checksum>https://raw.github.com/NitroCSIA/nitrocsia-xbmc-addons/master/addons.xml.md5</checksum>
-        <datadir zip="true">http://raw.github.com/NitroCSIA/nitrocsia-xbmc-addons/master/repo</datadir>
-	</extension>
-	<extension point="xbmc.addon.metadata">
-		<summary lang="en">Install NitroCSIA's Addons</summary>
-		<description lang="en">Download and install addons by NitroCSIA: LDS Videos, Hawaii News Now</description>
-		<platform>all</platform>
-	</extension>
-</addon>
 </addons>

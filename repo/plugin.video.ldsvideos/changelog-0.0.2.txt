@@ -1,5 +1,0 @@
-Version 0.0.1
-* Initial version
-
-Version 0.0.2
-* Fixed minor bug in the lds.org Conferences section - it was displaying talks that did not have available videos

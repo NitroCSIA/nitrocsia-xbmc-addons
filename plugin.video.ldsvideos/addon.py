@@ -1,4 +1,4 @@
-import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel
+import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel2, tempfile, shutil, traceback
 from base64 import b64decode
 from BeautifulSoup import BeautifulSoup
 try:
@@ -62,8 +62,30 @@ class Plugin():
         self.mcicon = xbmc.translatePath( os.path.join( self.home, 'imgs', 'mc-icon.jpg' ) )
         self.mcfanart = xbmc.translatePath( os.path.join( self.home, 'imgs', 'mc-fanart.jpg' ) )
         self.fanart = xbmc.translatePath( os.path.join( self.home, 'imgs', 'gc-fanart.jpg' ) )
-	self.ldsicon = self.icon
+        self.ldsicon = self.icon
         self.dlpath = self.__settings__.getSetting('dlpath')
+        # clear out latent items from the temp folder
+        tempdir = xbmc.translatePath('special://temp')
+        for filename in os.listdir(tempdir):
+            if filename[:7] == "tmpimg-":
+                try:
+                    shutil.rmtree(os.path.join(tempdir,filename))
+                except:
+                    print "Couldn't delete folder %s from the temp folder" % os.path.join(tempdir,filename)
+
+    def play_slideshow(self,url):
+        res = urllib.urlopen(url)
+        temp_folder = xbmc.translatePath('special://temp')
+        dpath = tempfile.mkdtemp(prefix="tmpimg-",dir=temp_folder)
+        temp_folder = os.path.join(temp_folder,dpath)
+        extension = os.path.splitext(os.path.basename(url).split('?')[0])[1]
+        if not extension: extension = "jpg"
+        temp_file = os.path.join(temp_folder,"tmpimg." + extension)
+        with open(temp_file,'wb') as f:
+            f.write(res.read())
+        res.close()
+        
+        xbmc.executebuiltin('SlideShow(%s)' % temp_folder)
 
     def resolve_url(self,url):
         print "Resolving URL: %s" % url
@@ -75,28 +97,27 @@ class Plugin():
         link = 'plugin://plugin.video.youtube/?action=play_video&videoid='+ match[0]
         return link
 
-    def add_link(self, thumb, info, urlparams, fanart=None):
+    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video"):
         if not fanart: fanart = self.fanart
         u=PATH+"?"+urllib.urlencode(urlparams)
         item=xbmcgui.ListItem(urlparams['name'], iconImage="DefaultVideo.png", thumbnailImage=thumb)
-        item.setInfo(type="Video", infoLabels=info)
+        item.setInfo(type=mtype, infoLabels=info)
         item.setProperty('IsPlayable', 'true')
         item.setProperty('Fanart_Image', fanart)
         try:
             if 'url' in urlparams:
-                if urlparams['url'][-4:].upper() == '.MP4':
-                    params = urllib.urlencode({'name':urlparams['name'],'url':urlparams['url'],'mode':str(15)})
+                if urlparams['url'][-4:].upper() == '.MP4' or urlparams['url'][-4:].upper() == '.MP3' or urlparams['url'][-4:].upper() == '.JPG':
+                    params = urllib.urlencode({'name':urlparams['name'],'url':urlparams['url'],'mode':"15"})
                     item.addContextMenuItems([('Download','XBMC.RunPlugin(%s?%s)' % (PATH,params))])
         except:
             pass
-            
-        xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=item)
+        xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=item,isFolder=False)
 
-    def add_dir(self,thumb,info, urlparams,fanart=None):
+    def add_dir(self,thumb,info, urlparams,fanart=None,mtype="video"):
         if not fanart: fanart = self.fanart
         u=PATH+"?"+urllib.urlencode(urlparams)
         item=xbmcgui.ListItem(urlparams['name'], iconImage="DefaultFolder.png", thumbnailImage=thumb)
-        item.setInfo( type="Video", infoLabels=info )
+        item.setInfo( type=mtype, infoLabels=info )
         item.setProperty('Fanart_Image', fanart)
         xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=item,isFolder=True)
 
@@ -110,7 +131,7 @@ class Plugin():
             try:
                 req = urllib2.urlopen(url)
                 CHUNK = 16 * 1024
-                with open(os.path.join(self.dlpath,name + '.mp4'),'wb') as f:
+                with open(os.path.join(self.dlpath,os.path.basename(url)),'wb') as f:
                     for chunk in iter(lambda: req.read(CHUNK), ''):
                         f.write(chunk)
                 xbmc.executebuiltin('XBMC.Notification("Download","Download complete")')
@@ -139,10 +160,10 @@ class LDSORG(Plugin):
     def get_menu(self):
         #self.add_link(self.icon,{'Title':'General Conference Live','Plot':'Watch the General Conference live stream!'},
         #        {'name':'Conference Live','url':self.gcLiveUrl,'mode':3},self.gcfanart)
-        self.add_dir(self.icon,{'Title':'LDS.org Video Categories','Plot':'Watch LDS.org videos sorted by category'},
-                {'name':'Categories','url':self.catUrl,'mode':2},self.fanart)
         self.add_dir(self.icon,{'Title':'LDS.org Featured Videos','Plot':'Watch LDS.org featured videos'},
                 {'name':'Featured','url':'http://www.lds.org/media-library/video?lang=eng','mode':13},self.fanart)
+        self.add_dir(self.icon,{'Title':'LDS.org Video Categories','Plot':'Watch LDS.org videos sorted by category'},
+                {'name':'Categories','url':self.catUrl,'mode':2},self.fanart)
         self.add_dir(self.icon,{'Title':'LDS General Conference','Plot':'Watch all General Conferences provided on LDS.org'},
                 {'name':'Conferences','mode':7},self.gcfanart)
 
@@ -160,13 +181,20 @@ class LDSORG(Plugin):
                 self.add_dir(i.img['src'],{'Title':name},{'name':name,'url':u,'mode':4},self.fanart)
 
     def get_video_list(self,url):
+        if not url:
+            return
         url = url + "&start=1&end=500&order=default"
         response = make_request(url)
-        jsonData = response.split('video_data=')[1].split(';start_id=')[0]
+        try:
+            jsonData = response.split('video_data=')[1].split(';start_id=')[0]
+        except:
+            print "Didn't find any 'video_data'"
+            return
         data = json.loads(jsonData)
         for k,v in data['videos'].iteritems():
             name = v['title'].encode('utf8')
             thumb = v['thumbURL']
+            params = v['params']
             #duration = v['length']
             desc = v['description'].encode('utf8')
             for dl in v['downloads']:
@@ -179,11 +207,13 @@ class LDSORG(Plugin):
                     href = v['downloads'][0]['link']
                 except:
                     # If this fails then it indicates that the content can't be downloaded, we have to use a player for it
-                    continue
+                    # Try to get the video from brightcove
+                    href = self.get_brightcove_video(params)
+                    if not href: continue
             self.add_link(thumb,{'Title':name,'Plot':desc},{'name':name,'url':href,'mode':5},self.fanart)
 
     # This function was taken from the General Conference plugin - https://github.com/viltsu/plugin.video.generalconference
-    def resolve_brightcove_req(self,url):
+    def resolve_brightcove_req_live(self,url):
         AMF_URL = 'http://c.brightcove.com/services/messagebroker/amf?playerKey=AQ~~,AAAAjP0hvGE~,N-ZbNsw4qBrgc4nqHfwj6D_S8kJzTvbq'
         LIVE_URL = url
         data = open(self.postData, 'rb')
@@ -199,6 +229,30 @@ class LDSORG(Plugin):
             print "Resolving URL %s" % url
             item = xbmcgui.ListItem(path=url)
             xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, item)
+
+    def get_brightcove_video(self,params):
+        BC_URL = "https://secure.brightcove.com/services/viewer/htmlFederated"
+        req = BC_URL + '?' + urllib.urlencode(params)
+        print "Accessing Brightcove URL: %s" % req
+        try:
+            res = urllib2.urlopen(req).read()
+            dic_str = res.split("var experienceJSON = ")[1].split(";\r\n")[0]
+            js = json.loads(dic_str)
+        except:
+            print "ERROR: Couldn't parse Brightcove URL. %s" % traceback.format_exc().splitlines()[-1]
+            return None
+        largest = 0
+        largest_url = None
+        try:
+            for r in js['data']['programmedContent']['videoPlayer']['mediaDTO']['renditions']:
+                if int(r['frameHeight']) == self.quality:
+                    return r['defaultURL']
+                if int(r['frameHeight']) > largest:
+                    largest = int(r['frameHeight'])
+                    largest_url = r['defaultURL']
+        except:
+            print "ERROR: Couldn't handle Brightcove JSON. %s" % traceback.format_exc().splitlines()[-1]
+        return largest_url
 
     def get_conferences(self,submode=None,url=None,sessionName=None):
         if not url:
@@ -267,14 +321,38 @@ class LDSORG(Plugin):
     def get_featured(self):
         url = 'http://www.lds.org/media-library/video?lang=eng'
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
-        for i in soup.find('div',{'class':'feature-box'}).findAll('div',{'class':'feature-control'}):
-            name = i.findNext('h3').getText().encode('utf8')
-            desc = i.p.getText().encode('utf8')
-            u = i.findNext('a')['href']
-            self.add_dir(self.icon,{'Title':name,'Plot':desc},{'name':name,'url':u,'mode':4})
+        for i in soup.find('div',{'class':'feature-box'}).find('ul',{'class':"feature-preview"})('li'):
+            fc = i.find('div',{'class':'feature-control'})
+            name = fc.findNext('h3').getText().encode('utf8')
+            desc = fc.p.getText().encode('utf8')
+            u = fc.findNext('a')['href']
+            thumb = "https://www.lds.org" + urllib.quote(i.findNext('img')['src'])
+            if 'media-library/video/categories' in u: mode = 2
+            else: mode = 4
+            self.add_dir(thumb,{'Title':name,'Plot':desc},{'name':name,'url':u,'mode':mode},thumb)
         for i in soup.find('ul',{'class':'media-list'})('li'):
+            name = i.findNext('h4').a.getText().encode('utf8')
+            desc = i.findNext('p').getText().encode('utf8')
             u = i.find('a',{'class':'video-thumb-play'})['href']
-            self.get_video_list(u)
+            thumb = i.findNext('img')['src']
+            try:
+                soup2 = BeautifulSoup(make_request(u), convertEntities=BeautifulSoup.HTML_ENTITIES)
+                for j in soup2.find('div',{'class':'galleryMeta'})('p'):
+                    try:
+                        if "for downloads" in j.a.getText():
+                            u = j.a['href']
+                            break
+                    except:
+                        continue
+                else:
+                    continue
+            except:
+                print "Couldn't get video link for %s. %s" % (name,traceback.format_exc().splitlines()[-1])
+                continue
+            if 'media-library/video/categories' in u: mode = 2
+            else: mode = 4
+            self.add_dir(thumb,{'Title':name,'Plot':desc},{'name':name,'url':u,'mode':mode},thumb)
+            #self.get_video_list(u)
 
 class BYUTV(Plugin):
     def __init__(self):
@@ -411,7 +489,7 @@ def main():
     lds = LDSORG()
     byu = BYUTV()
     plugin = Plugin()
-    mc = MormonChannel.MormonChannel(plugin)
+    mc = MormonChannel2.MormonChannel(plugin)
 
     if mode==None:
         plugin.get_root_menu()
@@ -460,12 +538,15 @@ def main():
     elif mode==13:
         lds.get_featured()
 
-    # Handle all BYUTV modes
+    # Handle all MormonChannel modes
     elif mode==14:
         mc.broker(params)
 
     elif mode==15:
         plugin.download(name,url)
+
+    elif mode==16:
+        plugin.play_slideshow(url)
 
     xbmcplugin.endOfDirectory(int(sys.argv[1]))
 
