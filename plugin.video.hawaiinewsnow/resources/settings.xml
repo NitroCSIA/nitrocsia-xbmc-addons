@@ -1,6 +1,6 @@
 <settings>
     <category label='30007'> <!--General-->
-        <setting id="quality" type="enum" lvalues="30003|30004|30005" label="30006" default="1"/>
+        <!--setting id="quality" type="enum" lvalues="30003|30004|30005" label="30006" default="1"/-->
         <setting id="dlpath" label='30008' type="folder" source="auto" option="writeable" />
     </category>
     <!--category label="30002">

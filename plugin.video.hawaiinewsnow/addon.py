@@ -43,7 +43,7 @@ class Plugin():
         self.icon = xbmc.translatePath( os.path.join( self.home, 'icon.png' ) )
         self.fanart = xbmc.translatePath( os.path.join( self.home, 'fanart.jpg' ) )
         self.dlpath = self.__settings__.getSetting('dlpath')
-        self.quality = QUALITY_TYPES[self.__settings__.getSetting('quality')]
+        #self.quality = QUALITY_TYPES[self.__settings__.getSetting('quality')]
         self.apiid = None
         self.token = None
         self.baseurl = "http://anappnews.vrvm.com/capi/hawaiinewsnow"
@@ -254,7 +254,8 @@ def main():
         action=None
 
     plugin = Plugin()
-    plugin.parse_regfile()
+    if os.path.exists(plugin.regfile):
+        plugin.parse_regfile()
     if action==None:
         plugin.register()
         plugin.get_root_menu()
