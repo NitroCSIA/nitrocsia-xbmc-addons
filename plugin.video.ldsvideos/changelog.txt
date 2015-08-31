@@ -9,3 +9,6 @@ Version 1.0.0
 * You can now download MP4s, MP3s, and JPEGs from Mormon Channel
 * Fixed LDS.org featured list
 * All videos on LDS.org SHOULD be available now (not just the downloadable ones)
+
+Version 1.0.1
+* Fixed bug that breaks the addon for super fast comps

@@ -7,6 +7,7 @@ import xbmcvfs
 import sys
 import xbmc
 import urllib2
+import time
 try:
         import json
 except:
@@ -46,7 +47,14 @@ class MormonChannel(Plugin):
         with open(self.mdb, 'wb') as f:
             f.write(mdb.read())
         mdb.close()
-        os.remove(tmppath)   
+        for i in range(0,5):
+            try:
+                os.remove(tmppath) 
+                break
+            except:
+                time.sleep(.5)
+        else:
+            print "ERROR: Coudn't remove temp mdb. %s" % sys.exc_info()[1]
         self.conn = sqlite3.connect(self.mdb)
         self.c = self.conn.cursor()
 
