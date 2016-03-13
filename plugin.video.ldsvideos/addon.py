@@ -445,7 +445,15 @@ class BYUTV(Plugin):
                 show = episode['productionName'].encode('utf8')
                 info = {'Title':name,'Plot':desc,'Premiered':date,'Season':season,
                         'TVShowTitle':show,'Mpaa':rating,'Year':date.split('-')[0]}
-                if not submode:
+
+                episodeNumberMatch = re.compile('Season (\d+) Episode (\d+)').findall(episode['name']);
+                if episodeNumberMatch:
+                    seasonNumber = int(episodeNumberMatch[0][0]);
+                    episodeNumber = int(episodeNumberMatch[0][1]);
+                    info['Season'] = seasonNumber;
+                    info['Episode'] = episodeNumber;
+                    name = '[S%02dE%02d] %s' % (seasonNumber,episodeNumber,name)
+                elif not submode:
                     name = '%02d - %s' % (index,name)
                 else:
                     name = '%s - %s' % (show,name)
