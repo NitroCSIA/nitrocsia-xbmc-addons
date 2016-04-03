@@ -30,6 +30,7 @@ def make_request(url, headers=None):
                 print 'Reason: ', e.reason
             if hasattr(e, 'code'):
                 print 'We failed with error code - %s.' % e.code
+            return ''
 
 def get_params():
         param=[]
@@ -97,13 +98,35 @@ class Plugin():
         link = 'plugin://plugin.video.youtube/?action=play_video&videoid='+ match[0]
         return link
 
-    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video"):
+    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video",ccurl=""):
         if not fanart: fanart = self.fanart
         u=PATH+"?"+urllib.urlencode(urlparams)
         item=xbmcgui.ListItem(urlparams['name'], iconImage="DefaultVideo.png", thumbnailImage=thumb)
         item.setInfo(type=mtype, infoLabels=info)
         item.setProperty('IsPlayable', 'true')
         item.setProperty('Fanart_Image', fanart)
+
+        if ccurl != "":
+            subtitleFilename = info['TVShowTitle'] + ' - ' + urlparams['name'] + ".en.srt"
+            subtitleFilepath = os.path.join(xbmc.translatePath('special://temp'),subtitleFilename)
+
+            if not os.path.exists(subtitleFilepath):   
+                subtitleFile = open(subtitleFilepath, 'w+')
+                subtitleData = make_request(ccurl)
+
+                if subtitleData != "":
+                    captions = re.compile('<p begin="(.+?)" end="(.+?)">(.+?)</p>').findall(subtitleData)
+                    idx = 1
+                    for cstart, cend, caption in captions:
+                        cstart = cstart.replace('.',',')
+                        cend   = cend.replace('.',',').split('"',1)[0]
+                        caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'")
+                        subtitleFile.write( '%s\n%s --> %s\n%s\n\n' % (idx, cstart, cend, caption))
+                        idx += 1
+
+                subtitleFile.close()
+      
+            item.setSubtitles([subtitleFilepath])
         try:
             if 'url' in urlparams:
                 if urlparams['url'][-4:].upper() == '.MP4' or urlparams['url'][-4:].upper() == '.MP3' or urlparams['url'][-4:].upper() == '.JPG':
@@ -457,7 +480,7 @@ class BYUTV(Plugin):
                     name = '%02d - %s' % (index,name)
                 else:
                     name = '%s - %s' % (show,name)
-                self.add_link(thumb,info,{'name':name,'url':u,'mode':5},fanart)
+                self.add_link(thumb,info,{'name':name,'url':u,'mode':5},fanart,"video",ccurl)
                 index = index + 1
 
     def get_popular(self):
