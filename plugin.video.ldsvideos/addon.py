@@ -153,7 +153,8 @@ class LDSORG(Plugin):
         self.headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1',
                         'Referer' : 'http://www.lds.com'}
         self.gcLiveUrl = 'http://c.brightcove.com/services/mobile/streaming/index/rendition.m3u8'
-        self.gcUrl = 'http://www.lds.org/general-conference/conferences?lang=eng'
+        self.baseUrl = 'http://www.lds.org'
+        self.gcUrl = self.baseUrl + '/general-conference'
         self.gcfanart = xbmc.translatePath( os.path.join( self.home, 'imgs', 'gc-fanart.jpg' ) )
         self.quality = QUALITY_TYPES[self.__settings__.getSetting('lds_quality')]
 
@@ -257,67 +258,101 @@ class LDSORG(Plugin):
     def get_conferences(self,submode=None,url=None,sessionName=None):
         if not url:
             url = self.gcUrl
+        print "url:%s" % url
         thumb = self.icon
-        data = make_request(url)
-        soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        #data = make_request(url)
+        #soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not submode: #Conference
-            for i in soup.body.find("div",{"class":"archive-by-year-list"})("li"):
-                year = i.a.getText().encode('utf8')
-                for k in i('li'):
-                    month = k.a.getText()
-                    u = k.a['href']
-                    name = '%s %s' % (year,month)
-                    self.add_dir(thumb,{'Title':name,'Plot':'General Conference from %s of %s' % (month,year),'Year':year},
-                            {'name':name,'url':u,'mode':7,'submode':1},self.gcfanart)
-        elif submode == 1: #Session
-            for i in soup.findAll("tr",{"class":"head-row"}):
-                name = i.td.h2.getText()
-                self.add_dir(thumb,{'Title':'%s Session' % name},{'name':name,'url':url,'mode':7,'submode':2},self.gcfanart)
-            # Add the conference highlights
-            try:
-                u = soup.find(text=re.compile(r"General Conference Highlights")).parent.findNext('div').find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                self.add_link(thumb,{'Title':'General Conference Highlights'},{'name':'Conference Highlights','url':u,'mode':5},self.gcfanart)
-            except:
-                pass
-        elif submode == 2: #Talks
-            for i in soup.findAll("tr",{"class":"head-row"}):
-                if i.td.h2.getText() == sessionName:
-                    # Get the link for the entire session
+            for listName in ['Conferences','Speakers','Topics']:            
+                try:
+                    self.add_dir(thumb,{'Title':listName},{'name':listName,'mode':7,'submode':1},self.gcfanart)
+                except:
+                    print "ERROR: Couldn't create Generl Conerence lists"
+        elif submode == 1: #List Conferences, Speakers, or Topics
+            data = make_request(url)
+            js_str = data.split('lists["%s"] = ' % sessionName)[1].split('</script>')[0].strip()[:-4] + '}'
+            listData = json.loads(js_str)
+            args_list = []
+            for name,uri in listData.iteritems():
+                name = name.encode('utf8')
+                u = self.baseUrl + uri
+                submode = 2 if sessionName == 'Conferences' else 3
+                args_list.append((thumb,{'Title':name},{'name':name,'url':u,'mode':7,'submode':submode},self.gcfanart))
+            if sessionName == "Conferences":
+                args_list = sorted(args_list,key=lambda k: k[2]['name'].split()[-1], reverse=True)
+            else:
+                args_list = sorted(args_list,key=lambda k: k[2]['name'].lower())
+            for args in args_list:
+                self.add_dir(*args)
+        elif submode == 2: #List Sessions
+            soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
+            for i in soup.body.findAll("span",{"class":"section__header__title"}):
+                name = i.getText().encode('utf8')
+                if "Session" in name or "General Relief Society Meeting" in name:
+                    self.add_dir(thumb,{'Title':name},{'name':name.replace('&#x27;',"'"),'url':url,'mode':7,'submode':3},self.gcfanart)
+        elif submode == 3: #List media
+            data = make_request(url)
+            # For some reason BeautifulSoup doesn't parse the sessions properly
+            session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
+            sessions = data.split(session_tag)
+            is_session = sessionName.split()[-1] == "Session" or "General Relief Society Meeting" in sessionName
+            args_list = []
+            for session in sessions:
+                soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
+                # If we're dealing with a session - see if there's a "full session" option
+                if is_session: 
+                    if sessionName != soup.find('span').getText().replace('&#x27;',"'"): 
+                        continue
+                    elif soup.find(text=sessionName.replace("'",'&#x27;')).parent.parent.parent.find(text="Download Video"):
+                        self.add_dir(thumb,{'Title':sessionName},{'name':sessionName +" - Full Session",'url':url,'mode':7,'submode':4},thumb)                   
+                for div in soup.findAll('div',{'class':re.compile('lumen-tile lumen-tile--horizontal lumen-tile--list.*')}):              
+                    media_uri = div.a['href']
+                    u = self.baseUrl + media_uri
                     try:
-                        u = i.find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                        self.add_link(thumb,{'Title':sessionName + ' Session'},{'name':'All','url':u,'mode':5},self.gcfanart)
+                        thumb = "http:" + div.find('noscript')['data-desktop']
                     except:
                         pass
-                    # Loop through all the nodes until we reach then next head-row then break
-                    node = i.findNext('tr')
-                    while (1):
-                        try:
-                            if not node or node['class'] == 'head-row': break
-                        except:
-                            pass
-                        # Test if this is a talk by trying to get the talk class
-                        try: 
-                            talk = node.find('span',{'class':'talk'}).getText().encode('utf8')
-                        except: 
-                            node = node.findNext('tr')
-                            continue
-                        speaker = node.find('span',{'class':'speaker'}).getText().encode('utf8')
-                        try:
-                            u = node.find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                        except:
-                            try:
-                                u = node.find("a",{"type":"video/mp4"})['href']
-                            except:
-                                pass
-                        if u:
-                            title = "%s - %s" % (str(speaker),str(talk)) if talk and talk != "" else "%s" % str(speaker)
-                            self.add_link(thumb,{'Title':title},{'name':title,'url':u,'mode':5},self.gcfanart)
-                        speaker = None
-                        talk = None
-                        u = None
-                        node = node.findNext('tr')
-                    break
-
+                    name_title = div.find('div',{'class':'lumen-tile__title'}).getText().strip().encode('utf8')
+                    if not name_title:
+                        name_title = div.find('div',{'class':'lumen-tile__title'}).div.getText().strip().encode('utf8')
+                    name_content = div.find('div',{'class':'lumen-tile__content'}).getText().strip().encode('utf8')
+                    name = "%s - %s" % (name_title,name_content)
+                    try:
+                        name = name.encode('utf8')
+                    except:
+                        pass
+                    args_list.append((thumb,{'Title':name},{'name':name,'url':u,'mode':7,'submode':4},thumb))
+            for args in args_list:
+                self.add_dir(*args)
+        elif submode == 4: 
+            data = make_request(url)
+            # For some reason BeautifulSoup doesn't parse the sessions properly
+            session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
+            sessions = data.split(session_tag)
+            is_session = sessionName.endswith(" - Full Session")
+            soup = None
+            for session in sessions:
+                soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
+                if is_session:
+                    if sessionName.replace(' - Full Session','') == soup.find('span').getText().replace('&#x27;',"'"): 
+                        break
+            if soup:
+                if not is_session:
+                    author = soup.head.find('meta',{'name':'author'})['content']
+                    description = soup.head.find('meta',{'name':'description'})['content'].encode('utf8')
+                    thumb = soup.head.find('meta',{'property':'og:image'})['content']
+                    title = soup.head.find('meta',{'property':'og:title'})['content'].encode('utf8')
+                else:
+                    title = sessionName
+                    description = sessionName
+                for i in soup.findAll('a',{'class':'button button--round button--blue'}):
+                    name = i.getText()
+                    if name == "Session":
+                        name = "MP3"
+                    elif name == "Talks and Music":
+                        continue
+                    u = i['href']
+                    self.add_link(thumb,{'Title':title,'Plot':description},{'name':name,'url':u,'mode':5},thumb)                
     def get_featured(self):
         url = 'http://www.lds.org/media-library/video?lang=eng'
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
