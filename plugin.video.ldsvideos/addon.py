@@ -120,7 +120,7 @@ class Plugin():
                     for cstart, cend, caption in captions:
                         cstart = cstart.replace('.',',')
                         cend   = cend.replace('.',',').split('"',1)[0]
-                        caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'").replace('&amp;','&')
+                        caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'").replace('&amp;','&').replace('<span tts:fontStyle="italic">','<i>').replace('</span>','</i>')
                         subtitleFile.write( '%s\n%s --> %s\n%s\n\n' % (idx, cstart, cend, caption))
                         idx += 1
 
