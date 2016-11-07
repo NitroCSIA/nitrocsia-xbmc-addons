@@ -6,3 +6,7 @@ Version 0.0.2
 
 Version 0.0.3
 * Fixed registration bug
+
+Version 0.0.4
+* Fixed the HNN and K5 live
+* Added KHON2 live

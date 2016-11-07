@@ -148,6 +148,9 @@ class Plugin():
         return
 
     def get_root_menu(self):
+        icon = "https://lintvkhon.files.wordpress.com/2014/04/logo-khon2-large.png"
+        url = 'http://khon2.com/live-stream'
+	self.add_link(icon,{'Title':'Watch KHON2 Live'},{'name':'Watch KHON2 Live','action':'live','url':url},icon)
         url = self.baseurl + '/hierarchy?pageName=default_client'
         res = self.do_http(url)
         xml = ET.fromstring(res)
@@ -156,13 +159,13 @@ class Plugin():
                 icon = videotree.attrib['iconUrl']
                 url = videotree.attrib['xmlUrl']
                 self.add_link(icon,
-                    {'TItle':'Watch HNN Now','Plot':'Hawaii News Now live stream. Availaable: M-F 4:30-8am, 5-6:30pm, 9pm, 10pm; Sat & Sun 5pm, 9pm, 10pm'},
+                    {'Title':'Watch HNN Now','Plot':'Hawaii News Now live stream. Available: M-F 4:30-8am, 5-6:30pm, 9pm, 10pm; Sat & Sun 5pm, 9pm, 10pm'},
                     {'name':'Watch HNN Now','action':'live','url':url},
                     icon)
             if videotree.attrib['name'] == 'WATCH K5 Live':
                 icon = videotree.attrib['iconUrl']
                 url = videotree.attrib['xmlUrl']
-                self.add_link(icon,{'Title':'Watch K5 Live'},{'name':'Watch K5 Live','action':'live_k5','url':url},icon)
+                self.add_link(icon,{'Title':'Watch K5 Live'},{'name':'Watch K5 Live','action':'live','url':url},icon)
             if videotree.attrib['name'] == 'Video':
                 icon = videotree.attrib['iconUrl']
                 for cat in videotree:
@@ -171,6 +174,7 @@ class Plugin():
                     self.add_dir(self.icon,{'Title':name},{'name':name,'action':'category','url':url},self.icon)
 
     def play_live_stream(self,url):
+        '''
         playtimes=[(datetime.time(4,30,00),datetime.time(8,00,00)),
                 (datetime.time(17,00,00),datetime.time(18,30,00)),
                 (datetime.time(21,00,00),datetime.time(21,30,00)),
@@ -181,28 +185,30 @@ class Plugin():
                 break
         else:
             dialog = xbmcgui.Dialog()
-            dialog.ok("Live Stream", "This stream is only available during these times:", "Weekdays - 4:30am to 8am, 5pm to 6:30pm, 9pm, 10pm",
+            dialog.ok("Live Stream", "Content is LIVE only during these times (HST):", "Weekdays - 4:30am to 8am, 5pm to 6:30pm, 9pm, 10pm",
                     "Weekends - 5pm, 9pm, 10pm")
+        '''
         res = urllib2.urlopen(url).read()
-        for numbers in re.findall("http://new.livestream.com/accounts/(\d+)/events/(\d+)/player",res):
-            k,j = numbers
-        for url in re.findall("\"(http://new.livestream.com.*)\"",res): 
+        for url in re.findall("\"(https?://new.livestream.com.*)\"",res): 
             res = urllib2.urlopen(url).read()
             jsontext = res.split('window.config = ')[1].split(';</script>')[0]
             js = json.loads(jsontext)
             m3u8_url = js['event']['stream_info']['m3u8_url']
-            #self.resolve_url(playurl)
             cj = CookieJar()
             opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
             res = opener.open(m3u8_url)
             ua="Player/LG Player 1.0 for Android 5.0.1 (stagefright alternative)"
-            cookies = ["_alid_=" + res.info().getheader('Set-Cookie').split('_alid_=')[1].split('; ')[0]]
-            cookies.append("hdntl=" + res.info().getheader('Set-Cookie').split('hdntl=')[1].split('; ')[0])
+            try:
+		cookies = ["_alid_=" + res.info().getheader('Set-Cookie').split('_alid_=')[1].split('; ')[0]]
+            except:
+                cookies = []
+            try:
+                cookies.append("hdntl=" + res.info().getheader('Set-Cookie').split('hdntl=')[1].split('; ')[0])
+            except:
+                pass
             cookie = '; '.join(cookies)
-
             res = res.read()
-
-            resolutions = re.findall("RESOLUTION=(\d{3,4}x\d{3,4}),CODECS",res)
+            resolutions = re.findall("RESOLUTION=(\d{3,4}x\d{3,4})",res)
             high_res = sorted(resolutions)[-1]
             play_m3u8 = None
             for i,line in enumerate(res.splitlines()):
@@ -210,18 +216,11 @@ class Plugin():
                     play_m3u8 = res.splitlines()[i+1].strip()
                     break
             if play_m3u8:
-                self.resolve_url(play_m3u8 + "|Cookie=%s&User-Agent=%s" % (cookie,ua))
-                xbmc.Player().play(item=play_m3u8 + "|Cookie=%s&User-Agent=%s" % (cookie,ua),listitem=xbmcgui.ListItem(path=url))
-
-    def play_k5_live(self,url):
-        res = urllib2.urlopen(url).read()
-        jsonurl = re.findall("<script type='text/javascript' src='(.+)'></script>",res)[0]
-        res = urllib2.urlopen(jsonurl).read()
-        js = res.split('mobileStreams:')[1].split('});')[0].replace('url','"url"').replace('type','"type"')
-        streams = json.loads(js)
-        for url in streams:
-            self.resolve_url(url['url'])
-            break
+                appstr = '|'
+                if cookie: appstr += 'Cookie=%s&' % cookie
+                appstr += 'User-Agent=%s' % ua
+                self.resolve_url(play_m3u8 + appstr)
+                xbmc.Player().play(item=play_m3u8 + appstr,listitem=xbmcgui.ListItem(path=url))
 
     def videos_from_category(self,url):
         ns = {'media':"http://search.yahoo.com/mrss/"}
@@ -271,9 +270,6 @@ def main():
 
     elif action=='live':
         plugin.play_live_stream(url)
-
-    elif action=='live_k5':
-        plugin.play_k5_live(url)
 
     xbmcplugin.endOfDirectory(int(sys.argv[1]))
 
