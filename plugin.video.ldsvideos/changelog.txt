@@ -12,3 +12,9 @@ Version 1.0.0
 
 Version 1.0.1
 * Fixed bug that breaks the addon for super fast comps
+
+Version 1.0.2
+* Updated to work with LDS.org new conferences page
+
+Version 1.0.3
+* Fixed broken conferences page due to LDS.org modifications

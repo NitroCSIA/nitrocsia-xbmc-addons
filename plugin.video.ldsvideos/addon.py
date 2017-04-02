@@ -269,11 +269,16 @@ class LDSORG(Plugin):
                 except:
                     print "ERROR: Couldn't create Generl Conerence lists"
         elif submode == 1: #List Conferences, Speakers, or Topics
+            listdic = {'Conferences':1, 'Speakers':2, 'Topics':3}
             data = make_request(url)
-            js_str = data.split('lists["%s"] = ' % sessionName)[1].split('</script>')[0].strip()[:-4] + '}'
+            js_str = data.split('lists["')[listdic[sessionName]].split('"] = ')[1].split('</script>')[0].strip()[:-4] + '}'
             listData = json.loads(js_str)
             args_list = []
             for name,uri in listData.iteritems():
+                # For some reason the speakers URIs provided are incorrect
+                if sessionName == 'Speakers':
+                    speaker,params = re.findall(r'/general-conference/speakers/(.*)\?(.*)',uri)[0]
+                    uri = '/general-conference/speakers?speaker=%s&%s' % (speaker,params)
                 name = name.encode('utf8')
                 u = self.baseUrl + uri
                 submode = 2 if sessionName == 'Conferences' else 3
@@ -292,6 +297,8 @@ class LDSORG(Plugin):
                     self.add_dir(thumb,{'Title':name},{'name':name.replace('&#x27;',"'"),'url':url,'mode':7,'submode':3},self.gcfanart)
         elif submode == 3: #List media
             data = make_request(url)
+            if not data:
+                raise Exception("No return from %s" % url)
             # For some reason BeautifulSoup doesn't parse the sessions properly
             session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
             sessions = data.split(session_tag)
@@ -314,7 +321,10 @@ class LDSORG(Plugin):
                         pass
                     name_title = div.find('div',{'class':'lumen-tile__title'}).getText().strip().encode('utf8')
                     if not name_title:
-                        name_title = div.find('div',{'class':'lumen-tile__title'}).div.getText().strip().encode('utf8')
+                        try:
+                            name_title = div.find('div',{'class':'lumen-tile__title'}).div.getText().strip().encode('utf8')
+                        except:
+                            name_title = ""
                     name_content = div.find('div',{'class':'lumen-tile__content'}).getText().strip().encode('utf8')
                     name = "%s - %s" % (name_title,name_content)
                     try:
