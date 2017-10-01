@@ -10,3 +10,7 @@ Version 0.0.3
 Version 0.0.4
 * Fixed the HNN and K5 live
 * Added KHON2 live
+
+Version 0.0.5
+* Updated API
+* Fixed everything
