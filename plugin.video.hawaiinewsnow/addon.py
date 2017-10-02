@@ -8,7 +8,7 @@ except:
 
 HANDLE = int(sys.argv[1])
 PATH = sys.argv[0]
-QUALITY_TYPES = {'0':'360','1':'720','2':'1080','':'720'}
+QUALITY_TYPES = {'0':'360','1':'720','2':'1080'}
 CATEGORY_IDS = {'91610','96072','4773','188022'}
 
 def get_params():
