@@ -108,7 +108,7 @@ class Plugin():
 
         #K5 Live
         url = 'http://www.k5thehometeam.com/category/201839/livestream'
-        icon = "https://vignette.wikia.nocookie.net/logopedia/images/a/aa/KFVE_2009.png/revision/latest?cb=20110424091952"
+        icon = "http://vignette.wikia.nocookie.net/logopedia/images/a/aa/KFVE_2009.png/revision/latest?cb=20110424091952"
         self.add_link(icon,{'Title':'Watch K5 Live'},{'name':'Watch K5 Live','action':'live','url':url},icon)
 
         for cid in CATEGORY_IDS:
@@ -125,7 +125,11 @@ class Plugin():
             res = self.do_http(url)
             jsontext = res.split('window.config = ')[1].split(';</script>')[0]
             js = json.loads(jsontext)
-            m3u8_url = js['event']['stream_info']['m3u8_url']
+            try:
+                m3u8_url = js['event']['stream_info']['m3u8_url']
+            except:
+                xbmcgui.Dialog().notification(xbmcaddon.Addon().getAddonInfo('name'),"Stream is offline")
+                return
             cj = CookieJar()
             opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
             res = opener.open(m3u8_url)
