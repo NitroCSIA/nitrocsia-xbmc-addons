@@ -20,3 +20,6 @@ Version 0.0.6
 
 Version 0.0.7
 * Disabled SSL verification for live streams
+
+Version 0.0.8
+* Fixed quality settings bug
