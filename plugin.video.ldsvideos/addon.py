@@ -1,4 +1,4 @@
-import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel2, tempfile, shutil, traceback
+import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel2, tempfile, shutil, traceback, xbmc
 from base64 import b64decode
 from BeautifulSoup import BeautifulSoup
 try:
@@ -14,7 +14,7 @@ except:
 HANDLE = int(sys.argv[1])
 PATH = sys.argv[0]
 QUALITY_TYPES = {'0':'360p','1':'720p','2':'1080p'}
-
+error = lambda x: xbmc.log(x,xbmc.LOGERROR)
 def make_request(url, headers=None):
         if headers is None:
             headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1'}
@@ -24,12 +24,12 @@ def make_request(url, headers=None):
             data = response.read()
             return data
         except urllib2.URLError, e:
-            print 'We failed to open "%s".' % url
+            error('We failed to open "%s".' % url)
             if hasattr(e, 'reason'):
-                print 'We failed to reach a server.'
-                print 'Reason: ', e.reason
+                error('We failed to reach a server.')
+                error('Reason: ' +  e.reason)
             if hasattr(e, 'code'):
-                print 'We failed with error code - %s.' % e.code
+                error('We failed with error code - %s.' % e.code)
 
 def get_params():
         param=[]
@@ -88,7 +88,6 @@ class Plugin():
         xbmc.executebuiltin('SlideShow(%s)' % temp_folder)
 
     def resolve_url(self,url):
-        print "Resolving URL: %s" % url
         item = xbmcgui.ListItem(path=url)
         xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
@@ -275,10 +274,6 @@ class LDSORG(Plugin):
             listData = json.loads(js_str)
             args_list = []
             for name,uri in listData.iteritems():
-                # For some reason the speakers URIs provided are incorrect
-                if sessionName == 'Speakers':
-                    speaker,params = re.findall(r'/general-conference/speakers/(.*)\?(.*)',uri)[0]
-                    uri = '/general-conference/speakers?speaker=%s&%s' % (speaker,params)
                 name = name.encode('utf8')
                 u = self.baseUrl + uri
                 submode = 2 if sessionName == 'Conferences' else 3
@@ -397,114 +392,6 @@ class LDSORG(Plugin):
             if 'media-library/video/categories' in u: mode = 2
             else: mode = 4
             self.add_dir(thumb,{'Title':name,'Plot':desc},{'name':name,'url':u,'mode':mode},thumb)
-            #self.get_video_list(u)
-
-class BYUTV(Plugin):
-    def __init__(self):
-        Plugin.__init__(self)
-        self.icon = self.byuicon
-        self.apiurl = 'http://www.byutv.org/api/Television/'
-        self.fanart = self.byufanart
-        #self.quality = QUALITY_TYPES[self.__settings__.getSetting('byu_quality')]
-
-    def get_menu(self):
-        self.add_link(self.icon,{'Title':'BYU TV','Plot':'BYU TV Live HD'},{'name':'BYU TV Live','mode':6},self.fanart)
-        self.add_dir(self.icon,{'Title':'Categories','Plot':'Watch BYU TV videos by category'},{'name':'Categories','mode':8},self.fanart)
-        self.add_dir(self.icon,{'Title':'All Shows','Plot':'Watch all BYU TV shows sorted alphabetically'},
-                {'name':'Shows A-Z','mode':9,'submode':1},self.fanart)
-        self.add_dir(self.icon,{'Title':'Popular Episodes','Plot':'Watch the most viewed BYU TV episodes'},
-                {'name':'Popular Episodes','mode':12},self.fanart)
-
-    def play_byu_live(self):
-        soup = BeautifulSoup(make_request(self.apiurl + 'GetLiveStreamUrl?context=Android%24US%24Release'))
-        urlCode = soup.getText().strip('"')
-        reqUrl = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/Iyamk6YZTw8DxrC60h0fQipg3BfL/'+urlCode+'?device=android_3plus_sdk-hook&domain=www.ooyala.com&supportedFormats=mp4%2Cm3u8%2Cwv_hls%2Cwv_wvm2Cwv_mp4'
-        data = json.loads(make_request(reqUrl))
-        for stream in data['authorization_data'][urlCode]['streams']:
-            url = b64decode(stream['url']['data'])
-            item = xbmcgui.ListItem(path=url)
-            try:
-                xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, item)
-            except:
-                continue
-    def get_categories(self):
-        data = json.loads(make_request(self.apiurl + 'GetTVShowCategories?context=Android%24US%24Release'))
-        for cat in data:
-            self.add_dir(self.icon,{'Title':cat['name']},{'name':cat['name'],'mode':9})
-
-    def get_shows(self,submode=None,cat=None):
-        if not submode and cat:
-            url = self.apiurl + 'GetShowsByCategory?context=Android%24US%24Release&categoryName=' + urllib.quote_plus(cat)
-        if submode == 1:  #All shows
-            url = self.apiurl + 'GetAllShows?context=Android%24US%24Release'
-        data = json.loads(make_request(url))
-        for show in data:
-            desc = show['description']
-            name = show['name']
-            guid = show['guid']
-            showCat = show['category']
-            number = show['episodeCount']
-            fanart = show['imageLarge']
-            thumb = show['imageThumbnail']
-            try: rating = show['rating']
-            except: pass
-            self.add_dir(thumb,{'Title':name,'Plot':desc,'Mpaa':rating},{'name':name,'mode':10,'guid':guid},fanart)
-
-    def get_seasons(self,sguid):
-        url = self.apiurl + "GetShowEpisodesByDate?context=Android%24US%24Release&showGuid=" + sguid
-        data = json.loads(make_request(url))
-        seasons = []
-        fanart = []
-        for episode in reversed(data):
-            if episode['season'] not in seasons and episode['season']:
-                seasons.append(episode['season'])
-                fanart.append(episode['largeImage'])
-        for index,season in enumerate(seasons):
-            self.add_dir(self.icon,{'Title':season},{'name':season,'mode':11,'guid':sguid},fanart[index])
-        if not seasons:
-            self.get_episodes(None,sguid)
-
-    def get_episodes(self,season,sguid,submode=None):
-        if not submode: # By TV show
-            url = self.apiurl + "GetShowEpisodesByDate?context=Android%24US%24Release&showGuid=" + sguid
-        if submode == 1: # Weekly popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Week&numToReturn=500"
-        if submode == 2: # Monly popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Month&numToReturn=500"
-        if submode == 3: # Total popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Total&numToReturn=500"
-        data = json.loads(make_request(url))
-        index = 1
-        for episode in reversed(data):
-            if episode['season'] == season or submode or not episode['season']:
-                desc = episode['description'].encode('utf8')
-                name = episode['name'].encode('utf8')
-                guid = episode['guid']
-                ccurl = episode['captionFileUrl']
-                fanart = episode['largeImage']
-                date = episode['premiereDate']
-                rating = episode['rating']
-                duration = int(episode['runtime'])/60
-                thumb = episode['thumbImage']
-                u = episode['videoPlayUrl']
-                show = episode['productionName'].encode('utf8')
-                info = {'Title':name,'Plot':desc,'Premiered':date,'Season':season,
-                        'TVShowTitle':show,'Mpaa':rating,'Year':date.split('-')[0]}
-                if not submode:
-                    name = '%02d - %s' % (index,name)
-                else:
-                    name = '%s - %s' % (show,name)
-                self.add_link(thumb,info,{'name':name,'url':u,'mode':5},fanart)
-                index = index + 1
-
-    def get_popular(self):
-        self.add_dir(self.icon,{'Title':'This Week','Plot':'Watch the most viewed episodes of this week'},
-                {'name':'This Week','mode':11,'guid':'N/A','submode':1})
-        self.add_dir(self.icon,{'Title':'This Month','Plot':'Watch the most viewed episodes of this month'},
-                {'name':'This Month','mode':11,'guid':'N/A','submode':2})
-        self.add_dir(self.icon,{'Title':'Ever','Plot':'Watch the most viewed episodes of all time'},
-                {'name':'Ever','mode':11,'guid':'N/A','submode':3})
-
 
 def main():
     xbmcplugin.setContent(HANDLE, 'tvshows')
@@ -532,8 +419,9 @@ def main():
     #print "Name: "+str(name)
 
     lds = LDSORG()
-    byu = BYUTV()
     plugin = Plugin()
+    import BYUTV
+    byu = BYUTV.BYUTV(plugin)
     mc = MormonChannel2.MormonChannel(plugin)
 
     if mode==None:
@@ -558,7 +446,8 @@ def main():
         plugin.resolve_url(url)
 
     elif mode==6:
-        byu.play_byu_live()
+        byu.broker(params)
+        #byu.play_byu_live()
 
     elif mode==7:
         lds.get_conferences(submode,url,name)
