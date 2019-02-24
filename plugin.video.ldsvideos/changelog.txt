@@ -21,3 +21,6 @@ Version 1.0.3
 
 Version 1.0.4
 * Fixed broken BYUTV caused by API changes
+
+Version 1.0.5
+* Fixed BYUTV. Hardcoded BYUTV homepage id since it can't be located dynamically anymore

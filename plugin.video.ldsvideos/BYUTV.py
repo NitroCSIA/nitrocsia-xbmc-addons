@@ -23,16 +23,8 @@ class BYUTV(Plugin):
         self.headers = {"x-byutv-platformkey":"xsaaw9c7y5","x-byutv-context":"web$US","content_type":"application/json","user-agent":"Mozilla/5.0 (X11; CrOS x86_64 11210.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3593.0 Safari/537.36"}
 
     def get_menu(self):
-        url = "https://www.byutv.org"
-        res = make_request(url)
-        js = json.loads(res.split("root.state.vanityUrls = ")[1].split('];')[0] + ']')
-        for dic in js:
-            if dic['target']['title'] != 'Home':
-                continue
-            page_uid = dic['target']['value']
-            break
-        else:
-            raise Exception("Couldn't find home page")
+        # Home page id
+        page_uid = "cd2346de-66ed-4d33-a763-da7ed1ba7606"
         self.get_page(page_uid,root=True)
 
     def get_page(self,pageid,root=False):
