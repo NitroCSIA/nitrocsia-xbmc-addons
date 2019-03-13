@@ -1,10 +1,10 @@
-import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel2, tempfile, shutil, traceback
+import urllib, urllib2, os, re, xbmcplugin, xbmcgui, xbmcaddon, xbmcvfs, sys, string, MormonChannel2, tempfile, shutil, traceback, xbmc
 from base64 import b64decode
 from BeautifulSoup import BeautifulSoup
 try:
     import StorageServer
 except:
-    import storageserverdummy as StorageServer 
+    import storageserverdummy as StorageServer
 try:
     import json
 except:
@@ -14,7 +14,7 @@ except:
 HANDLE = int(sys.argv[1])
 PATH = sys.argv[0]
 QUALITY_TYPES = {'0':'360p','1':'720p','2':'1080p'}
-
+error = lambda x: xbmc.log(x,xbmc.LOGERROR)
 def make_request(url, headers=None):
         if headers is None:
             headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1'}
@@ -24,13 +24,12 @@ def make_request(url, headers=None):
             data = response.read()
             return data
         except urllib2.URLError, e:
-            print 'We failed to open "%s".' % url
+            error('We failed to open "%s".' % url)
             if hasattr(e, 'reason'):
-                print 'We failed to reach a server.'
-                print 'Reason: ', e.reason
+                error('We failed to reach a server.')
+                error('Reason: ' +  e.reason)
             if hasattr(e, 'code'):
-                print 'We failed with error code - %s.' % e.code
-            return ''
+                error('We failed with error code - %s.' % e.code)
 
 def get_params():
         param=[]
@@ -89,7 +88,6 @@ class Plugin():
         xbmc.executebuiltin('SlideShow(%s)' % temp_folder)
 
     def resolve_url(self,url):
-        print "Resolving URL: %s" % url
         item = xbmcgui.ListItem(path=url)
         xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
@@ -110,7 +108,7 @@ class Plugin():
             subtitleFilename = info['TVShowTitle'] + ' - ' + urlparams['name'] + ".en.srt"
             subtitleFilepath = os.path.join(xbmc.translatePath('special://temp'),subtitleFilename)
 
-            if not os.path.exists(subtitleFilepath):   
+            if not os.path.exists(subtitleFilepath):
                 subtitleFile = open(subtitleFilepath, 'w+')
                 subtitleData = make_request(ccurl)
 
@@ -159,7 +157,7 @@ class Plugin():
                         f.write(chunk)
                 xbmc.executebuiltin('XBMC.Notification("Download","Download complete")')
             except:
-                print str(sys.exc_info())  
+                print str(sys.exc_info())
                 xbmc.executebuiltin('XBMC.Notification("Download","Error downloading file")')
              
     def get_root_menu(self):
@@ -176,7 +174,8 @@ class LDSORG(Plugin):
         self.headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1',
                         'Referer' : 'http://www.lds.com'}
         self.gcLiveUrl = 'http://c.brightcove.com/services/mobile/streaming/index/rendition.m3u8'
-        self.gcUrl = 'http://www.lds.org/general-conference/conferences?lang=eng'
+        self.baseUrl = 'http://www.lds.org'
+        self.gcUrl = self.baseUrl + '/general-conference'
         self.gcfanart = xbmc.translatePath( os.path.join( self.home, 'imgs', 'gc-fanart.jpg' ) )
         self.quality = QUALITY_TYPES[self.__settings__.getSetting('lds_quality')]
 
@@ -280,67 +279,107 @@ class LDSORG(Plugin):
     def get_conferences(self,submode=None,url=None,sessionName=None):
         if not url:
             url = self.gcUrl
+        print "url:%s" % url
         thumb = self.icon
-        data = make_request(url)
-        soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        #data = make_request(url)
+        #soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not submode: #Conference
-            for i in soup.body.find("div",{"class":"archive-by-year-list"})("li"):
-                year = i.a.getText().encode('utf8')
-                for k in i('li'):
-                    month = k.a.getText()
-                    u = k.a['href']
-                    name = '%s %s' % (year,month)
-                    self.add_dir(thumb,{'Title':name,'Plot':'General Conference from %s of %s' % (month,year),'Year':year},
-                            {'name':name,'url':u,'mode':7,'submode':1},self.gcfanart)
-        elif submode == 1: #Session
-            for i in soup.findAll("tr",{"class":"head-row"}):
-                name = i.td.h2.getText()
-                self.add_dir(thumb,{'Title':'%s Session' % name},{'name':name,'url':url,'mode':7,'submode':2},self.gcfanart)
-            # Add the conference highlights
-            try:
-                u = soup.find(text=re.compile(r"General Conference Highlights")).parent.findNext('div').find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                self.add_link(thumb,{'Title':'General Conference Highlights'},{'name':'Conference Highlights','url':u,'mode':5},self.gcfanart)
-            except:
-                pass
-        elif submode == 2: #Talks
-            for i in soup.findAll("tr",{"class":"head-row"}):
-                if i.td.h2.getText() == sessionName:
-                    # Get the link for the entire session
+            for listName in ['Conferences','Speakers','Topics']:
+                try:
+                    self.add_dir(thumb,{'Title':listName},{'name':listName,'mode':7,'submode':1},self.gcfanart)
+                except:
+                    print "ERROR: Couldn't create Generl Conerence lists"
+        elif submode == 1: #List Conferences, Speakers, or Topics
+            listdic = {'Conferences':1, 'Speakers':2, 'Topics':3}
+            data = make_request(url)
+            js_str = data.split('lists["')[listdic[sessionName]].split('"] = ')[1].split('</script>')[0].strip()[:-4] + '}'
+            listData = json.loads(js_str)
+            args_list = []
+            for name,uri in listData.iteritems():
+                name = name.encode('utf8')
+                u = self.baseUrl + uri
+                submode = 2 if sessionName == 'Conferences' else 3
+                args_list.append((thumb,{'Title':name},{'name':name,'url':u,'mode':7,'submode':submode},self.gcfanart))
+            if sessionName == "Conferences":
+                args_list = sorted(args_list,key=lambda k: k[2]['name'].split()[-1], reverse=True)
+            else:
+                args_list = sorted(args_list,key=lambda k: k[2]['name'].lower())
+            for args in args_list:
+                self.add_dir(*args)
+        elif submode == 2: #List Sessions
+            soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
+            for i in soup.body.findAll("span",{"class":"section__header__title"}):
+                name = i.getText().encode('utf8')
+                if "Session" in name or "General Relief Society Meeting" in name:
+                    self.add_dir(thumb,{'Title':name},{'name':name.replace('&#x27;',"'"),'url':url,'mode':7,'submode':3},self.gcfanart)
+        elif submode == 3: #List media
+            data = make_request(url)
+            if not data:
+                raise Exception("No return from %s" % url)
+            # For some reason BeautifulSoup doesn't parse the sessions properly
+            session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
+            sessions = data.split(session_tag)
+            is_session = sessionName.split()[-1] == "Session" or "General Relief Society Meeting" in sessionName
+            args_list = []
+            for session in sessions:
+                soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
+                # If we're dealing with a session - see if there's a "full session" option
+                if is_session:
+                    if sessionName != soup.find('span').getText().replace('&#x27;',"'"):
+                        continue
+                    elif soup.find(text=sessionName.replace("'",'&#x27;')).parent.parent.parent.find(text="Download Video"):
+                        self.add_dir(thumb,{'Title':sessionName},{'name':sessionName +" - Full Session",'url':url,'mode':7,'submode':4},thumb)
+                for div in soup.findAll('div',{'class':re.compile('lumen-tile lumen-tile--horizontal lumen-tile--list.*')}):
+                    media_uri = div.a['href']
+                    u = self.baseUrl + media_uri
                     try:
-                        u = i.find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                        self.add_link(thumb,{'Title':sessionName + ' Session'},{'name':'All','url':u,'mode':5},self.gcfanart)
+                        thumb = "http:" + div.find('noscript')['data-desktop']
                     except:
                         pass
-                    # Loop through all the nodes until we reach then next head-row then break
-                    node = i.findNext('tr')
-                    while (1):
+                    name_title = div.find('div',{'class':'lumen-tile__title'}).getText().strip().encode('utf8')
+                    if not name_title:
                         try:
-                            if not node or node['class'] == 'head-row': break
+                            name_title = div.find('div',{'class':'lumen-tile__title'}).div.getText().strip().encode('utf8')
                         except:
-                            pass
-                        # Test if this is a talk by trying to get the talk class
-                        try: 
-                            talk = node.find('span',{'class':'talk'}).getText().encode('utf8')
-                        except: 
-                            node = node.findNext('tr')
-                            continue
-                        speaker = node.find('span',{'class':'speaker'}).getText().encode('utf8')
-                        try:
-                            u = node.find("a",{"class":"video-%s" % self.quality,"type":"video/mp4"})['href']
-                        except:
-                            try:
-                                u = node.find("a",{"type":"video/mp4"})['href']
-                            except:
-                                pass
-                        if u:
-                            title = "%s - %s" % (str(speaker),str(talk)) if talk and talk != "" else "%s" % str(speaker)
-                            self.add_link(thumb,{'Title':title},{'name':title,'url':u,'mode':5},self.gcfanart)
-                        speaker = None
-                        talk = None
-                        u = None
-                        node = node.findNext('tr')
-                    break
-
+                            name_title = ""
+                    name_content = div.find('div',{'class':'lumen-tile__content'}).getText().strip().encode('utf8')
+                    name = "%s - %s" % (name_title,name_content)
+                    try:
+                        name = name.encode('utf8')
+                    except:
+                        pass
+                    args_list.append((thumb,{'Title':name},{'name':name,'url':u,'mode':7,'submode':4},thumb))
+            for args in args_list:
+                self.add_dir(*args)
+        elif submode == 4:
+            data = make_request(url)
+            # For some reason BeautifulSoup doesn't parse the sessions properly
+            session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
+            sessions = data.split(session_tag)
+            is_session = sessionName.endswith(" - Full Session")
+            soup = None
+            for session in sessions:
+                soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
+                if is_session:
+                    if sessionName.replace(' - Full Session','') == soup.find('span').getText().replace('&#x27;',"'"):
+                        break
+            if soup:
+                if not is_session:
+                    author = soup.head.find('meta',{'name':'author'})['content']
+                    description = soup.head.find('meta',{'name':'description'})['content'].encode('utf8')
+                    thumb = soup.head.find('meta',{'property':'og:image'})['content']
+                    title = soup.head.find('meta',{'property':'og:title'})['content'].encode('utf8')
+                else:
+                    title = sessionName
+                    description = sessionName
+                for i in soup.findAll('a',{'class':'button button--round button--blue'}):
+                    name = i.getText()
+                    if name == "Session":
+                        name = "MP3"
+                    elif name == "Talks and Music":
+                        continue
+                    u = i['href']
+                    self.add_link(thumb,{'Title':title,'Plot':description},{'name':name,'url':u,'mode':5},thumb)
     def get_featured(self):
         url = 'http://www.lds.org/media-library/video?lang=eng'
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
@@ -375,122 +414,6 @@ class LDSORG(Plugin):
             if 'media-library/video/categories' in u: mode = 2
             else: mode = 4
             self.add_dir(thumb,{'Title':name,'Plot':desc},{'name':name,'url':u,'mode':mode},thumb)
-            #self.get_video_list(u)
-
-class BYUTV(Plugin):
-    def __init__(self):
-        Plugin.__init__(self)
-        self.icon = self.byuicon
-        self.apiurl = 'http://www.byutv.org/api/Television/'
-        self.fanart = self.byufanart
-        #self.quality = QUALITY_TYPES[self.__settings__.getSetting('byu_quality')]
-
-    def get_menu(self):
-        self.add_link(self.icon,{'Title':'BYU TV','Plot':'BYU TV Live HD'},{'name':'BYU TV Live','mode':6},self.fanart)
-        self.add_dir(self.icon,{'Title':'Categories','Plot':'Watch BYU TV videos by category'},{'name':'Categories','mode':8},self.fanart)
-        self.add_dir(self.icon,{'Title':'All Shows','Plot':'Watch all BYU TV shows sorted alphabetically'},
-                {'name':'Shows A-Z','mode':9,'submode':1},self.fanart)
-        self.add_dir(self.icon,{'Title':'Popular Episodes','Plot':'Watch the most viewed BYU TV episodes'},
-                {'name':'Popular Episodes','mode':12},self.fanart)
-
-    def play_byu_live(self):
-        soup = BeautifulSoup(make_request(self.apiurl + 'GetLiveStreamUrl?context=Android%24US%24Release'))
-        urlCode = soup.getText().strip('"')
-        reqUrl = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/Iyamk6YZTw8DxrC60h0fQipg3BfL/'+urlCode+'?device=android_3plus_sdk-hook&domain=www.ooyala.com&supportedFormats=mp4%2Cm3u8%2Cwv_hls%2Cwv_wvm2Cwv_mp4'
-        data = json.loads(make_request(reqUrl))
-        for stream in data['authorization_data'][urlCode]['streams']:
-            url = b64decode(stream['url']['data'])
-            item = xbmcgui.ListItem(path=url)
-            try:
-                xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, item)
-            except:
-                continue
-    def get_categories(self):
-        data = json.loads(make_request(self.apiurl + 'GetTVShowCategories?context=Android%24US%24Release'))
-        for cat in data:
-            self.add_dir(self.icon,{'Title':cat['name']},{'name':cat['name'],'mode':9})
-
-    def get_shows(self,submode=None,cat=None):
-        if not submode and cat:
-            url = self.apiurl + 'GetShowsByCategory?context=Android%24US%24Release&categoryName=' + urllib.quote_plus(cat)
-        if submode == 1:  #All shows
-            url = self.apiurl + 'GetAllShows?context=Android%24US%24Release'
-        data = json.loads(make_request(url))
-        for show in data:
-            desc = show['description']
-            name = show['name']
-            guid = show['guid']
-            showCat = show['category']
-            number = show['episodeCount']
-            fanart = show['imageLarge']
-            thumb = show['imageThumbnail']
-            try: rating = show['rating']
-            except: pass
-            self.add_dir(thumb,{'Title':name,'Plot':desc,'Mpaa':rating},{'name':name,'mode':10,'guid':guid},fanart)
-
-    def get_seasons(self,sguid):
-        url = self.apiurl + "GetShowEpisodesByDate?context=Android%24US%24Release&showGuid=" + sguid
-        data = json.loads(make_request(url))
-        seasons = []
-        fanart = []
-        for episode in reversed(data):
-            if episode['season'] not in seasons and episode['season']:
-                seasons.append(episode['season'])
-                fanart.append(episode['largeImage'])
-        for index,season in enumerate(seasons):
-            self.add_dir(self.icon,{'Title':season},{'name':season,'mode':11,'guid':sguid},fanart[index])
-        if not seasons:
-            self.get_episodes(None,sguid)
-
-    def get_episodes(self,season,sguid,submode=None):
-        if not submode: # By TV show
-            url = self.apiurl + "GetShowEpisodesByDate?context=Android%24US%24Release&showGuid=" + sguid
-        if submode == 1: # Weekly popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Week&numToReturn=500"
-        if submode == 2: # Monly popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Month&numToReturn=500"
-        if submode == 3: # Total popular
-            url = self.apiurl + "GetMostPopular?context=Android%24US%24Release&granularity=Total&numToReturn=500"
-        data = json.loads(make_request(url))
-        index = 1
-        for episode in reversed(data):
-            if episode['season'] == season or submode or not episode['season']:
-                desc = episode['description'].encode('utf8')
-                name = episode['name'].encode('utf8')
-                guid = episode['guid']
-                ccurl = episode['captionFileUrl']
-                fanart = episode['largeImage']
-                date = episode['premiereDate']
-                rating = episode['rating']
-                duration = int(episode['runtime'])/60
-                thumb = episode['thumbImage']
-                u = episode['videoPlayUrl']
-                show = episode['productionName'].encode('utf8')
-                info = {'Title':name,'Plot':desc,'Premiered':date,'Season':season,
-                        'TVShowTitle':show,'Mpaa':rating,'Year':date.split('-')[0]}
-
-                episodeNumberMatch = re.compile('Season (\d+) Episode (\d+)').findall(episode['name']);
-                if episodeNumberMatch:
-                    seasonNumber = int(episodeNumberMatch[0][0]);
-                    episodeNumber = int(episodeNumberMatch[0][1]);
-                    info['Season'] = seasonNumber;
-                    info['Episode'] = episodeNumber;
-                    name = '[S%02dE%02d] %s' % (seasonNumber,episodeNumber,name)
-                elif not submode:
-                    name = '%02d - %s' % (index,name)
-                else:
-                    name = '%s - %s' % (show,name)
-                self.add_link(thumb,info,{'name':name,'url':u,'mode':5},fanart,"video",ccurl)
-                index = index + 1
-
-    def get_popular(self):
-        self.add_dir(self.icon,{'Title':'This Week','Plot':'Watch the most viewed episodes of this week'},
-                {'name':'This Week','mode':11,'guid':'N/A','submode':1})
-        self.add_dir(self.icon,{'Title':'This Month','Plot':'Watch the most viewed episodes of this month'},
-                {'name':'This Month','mode':11,'guid':'N/A','submode':2})
-        self.add_dir(self.icon,{'Title':'Ever','Plot':'Watch the most viewed episodes of all time'},
-                {'name':'Ever','mode':11,'guid':'N/A','submode':3})
-
 
 def main():
     xbmcplugin.setContent(HANDLE, 'tvshows')
@@ -518,8 +441,9 @@ def main():
     #print "Name: "+str(name)
 
     lds = LDSORG()
-    byu = BYUTV()
     plugin = Plugin()
+    import BYUTV
+    byu = BYUTV.BYUTV(plugin)
     mc = MormonChannel2.MormonChannel(plugin)
 
     if mode==None:
@@ -544,7 +468,8 @@ def main():
         plugin.resolve_url(url)
 
     elif mode==6:
-        byu.play_byu_live()
+        byu.broker(params)
+        #byu.play_byu_live()
 
     elif mode==7:
         lds.get_conferences(submode,url,name)
@@ -584,4 +509,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
