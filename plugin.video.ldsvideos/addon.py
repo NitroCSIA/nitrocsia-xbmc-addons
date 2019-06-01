@@ -96,7 +96,54 @@ class Plugin():
         link = 'plugin://plugin.video.youtube/?action=play_video&videoid='+ match[0]
         return link
 
-    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video",ccurl=""):
+    def ensure_subtitle_file_exists(self, info, urlparams):
+        subtitleFilename = info['Title'] + ".en.srt"
+        subtitleFilename = re.sub('[^\w\-_\. ]', '_', subtitleFilename)
+        rootSubtitleDirectory = os.path.join(xbmc.translatePath('special://temp'), 'subtitles')
+        if not os.path.exists(rootSubtitleDirectory):
+            os.makedirs(rootSubtitleDirectory)
+        showSubtitleDirectory = os.path.join(rootSubtitleDirectory, info['TVShowTitle'])
+        if not os.path.exists(showSubtitleDirectory):
+            os.makedirs(showSubtitleDirectory)
+        
+        subtitleFilepath = os.path.join(showSubtitleDirectory, subtitleFilename)
+
+        if not os.path.exists(subtitleFilepath):
+            url = self.api_url + 'catalog/getvideosforcontent?contentid=%s&channel=byutv' % urlparams['id']
+            res = json.loads(make_request(url,headers=self.headers))
+            
+            type = False
+            if 'ooyalaVOD' in res:
+                type = 'ooyalaVOD'
+            if 'dvr' in res:
+                type = 'dvr'
+                
+            
+            if not type:
+                return False
+            
+            if not res[type]['captionAvailable']:
+                return False;
+            
+            subtitleData = make_request(res[type]['captionFileUrl'])
+            if subtitleData == "":
+                return False
+
+            captions = re.compile('<p begin="(.+?)" end="(.+?)">(.+?)</p>').findall(subtitleData)
+            idx = 1
+            subtitleFile = open(subtitleFilepath, 'w+')
+            for cstart, cend, caption in captions:
+                cstart = cstart.replace('.',',')
+                cend = cend.replace('.',',').split('"',1)[0]
+                caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'").replace('&amp;','&').replace('<span tts:fontStyle="italic">','<i>').replace('</span>','</i>')
+                subtitleFile.write( '%s\n%s --> %s\n%s\n\n' % (idx, cstart, cend, caption))
+                idx += 1
+            
+            subtitleFile.close()
+        
+        return subtitleFilepath
+
+    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video", checkCaption=False):
         if not fanart: fanart = self.fanart
         u=PATH+"?"+urllib.urlencode(urlparams)
         item=xbmcgui.ListItem(urlparams['name'], iconImage="DefaultVideo.png", thumbnailImage=thumb)
@@ -104,27 +151,11 @@ class Plugin():
         item.setProperty('IsPlayable', 'true')
         item.setProperty('Fanart_Image', fanart)
 
-        if ccurl != "":
-            subtitleFilename = info['TVShowTitle'] + ' - ' + urlparams['name'] + ".en.srt"
-            subtitleFilepath = os.path.join(xbmc.translatePath('special://temp'),subtitleFilename)
-
-            if not os.path.exists(subtitleFilepath):
-                subtitleFile = open(subtitleFilepath, 'w+')
-                subtitleData = make_request(ccurl)
-
-                if subtitleData != "":
-                    captions = re.compile('<p begin="(.+?)" end="(.+?)">(.+?)</p>').findall(subtitleData)
-                    idx = 1
-                    for cstart, cend, caption in captions:
-                        cstart = cstart.replace('.',',')
-                        cend   = cend.replace('.',',').split('"',1)[0]
-                        caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'").replace('&amp;','&').replace('<span tts:fontStyle="italic">','<i>').replace('</span>','</i>')
-                        subtitleFile.write( '%s\n%s --> %s\n%s\n\n' % (idx, cstart, cend, caption))
-                        idx += 1
-
-                subtitleFile.close()
-      
-            item.setSubtitles([subtitleFilepath])
+        if checkCaption:
+            subtitleFilepath = self.ensure_subtitle_file_exists(info, urlparams)
+            if subtitleFilepath:
+                item.setSubtitles([subtitleFilepath])
+            
         try:
             if 'url' in urlparams:
                 if urlparams['url'][-4:].upper() == '.MP4' or urlparams['url'][-4:].upper() == '.MP3' or urlparams['url'][-4:].upper() == '.JPG':
