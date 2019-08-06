@@ -4,7 +4,7 @@ from BeautifulSoup import BeautifulSoup
 try:
     import StorageServer
 except:
-    import storageserverdummy as StorageServer 
+    import storageserverdummy as StorageServer
 try:
     import json
 except:
@@ -96,13 +96,66 @@ class Plugin():
         link = 'plugin://plugin.video.youtube/?action=play_video&videoid='+ match[0]
         return link
 
-    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video"):
+    def ensure_subtitle_file_exists(self, info, urlparams):
+        subtitleFilename = info['Title'] + ".en.srt"
+        subtitleFilename = re.sub('[^\w\-_\. ]', '_', subtitleFilename)
+        rootSubtitleDirectory = os.path.join(xbmc.translatePath('special://temp'), 'subtitles')
+        if not os.path.exists(rootSubtitleDirectory):
+            os.makedirs(rootSubtitleDirectory)
+        showSubtitleDirectory = os.path.join(rootSubtitleDirectory, info['TVShowTitle'])
+        if not os.path.exists(showSubtitleDirectory):
+            os.makedirs(showSubtitleDirectory)
+        
+        subtitleFilepath = os.path.join(showSubtitleDirectory, subtitleFilename)
+
+        if not os.path.exists(subtitleFilepath):
+            url = self.api_url + 'catalog/getvideosforcontent?contentid=%s&channel=byutv' % urlparams['id']
+            res = json.loads(make_request(url,headers=self.headers))
+            
+            type = False
+            if 'ooyalaVOD' in res:
+                type = 'ooyalaVOD'
+            if 'dvr' in res:
+                type = 'dvr'
+                
+            
+            if not type:
+                return False
+            
+            if not res[type]['captionAvailable']:
+                return False;
+            
+            subtitleData = make_request(res[type]['captionFileUrl'])
+            if subtitleData == "":
+                return False
+
+            captions = re.compile('<p begin="(.+?)" end="(.+?)">(.+?)</p>').findall(subtitleData)
+            idx = 1
+            subtitleFile = open(subtitleFilepath, 'w+')
+            for cstart, cend, caption in captions:
+                cstart = cstart.replace('.',',')
+                cend = cend.replace('.',',').split('"',1)[0]
+                caption = caption.replace('<br/>','\n').replace('&quot;','"').replace('&gt;','>').replace('&apos;',"'").replace('&amp;','&').replace('<span tts:fontStyle="italic">','<i>').replace('</span>','</i>')
+                subtitleFile.write( '%s\n%s --> %s\n%s\n\n' % (idx, cstart, cend, caption))
+                idx += 1
+            
+            subtitleFile.close()
+        
+        return subtitleFilepath
+
+    def add_link(self, thumb, info, urlparams, fanart=None, mtype="video", checkCaption=False):
         if not fanart: fanart = self.fanart
         u=PATH+"?"+urllib.urlencode(urlparams)
         item=xbmcgui.ListItem(urlparams['name'], iconImage="DefaultVideo.png", thumbnailImage=thumb)
         item.setInfo(type=mtype, infoLabels=info)
         item.setProperty('IsPlayable', 'true')
         item.setProperty('Fanart_Image', fanart)
+
+        if checkCaption:
+            subtitleFilepath = self.ensure_subtitle_file_exists(info, urlparams)
+            if subtitleFilepath:
+                item.setSubtitles([subtitleFilepath])
+            
         try:
             if 'url' in urlparams:
                 if urlparams['url'][-4:].upper() == '.MP4' or urlparams['url'][-4:].upper() == '.MP3' or urlparams['url'][-4:].upper() == '.JPG':
@@ -135,7 +188,7 @@ class Plugin():
                         f.write(chunk)
                 xbmc.executebuiltin('XBMC.Notification("Download","Download complete")')
             except:
-                print str(sys.exc_info())  
+                print str(sys.exc_info())
                 xbmc.executebuiltin('XBMC.Notification("Download","Error downloading file")')
              
     def get_root_menu(self):
@@ -262,7 +315,7 @@ class LDSORG(Plugin):
         #data = make_request(url)
         #soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not submode: #Conference
-            for listName in ['Conferences','Speakers','Topics']:            
+            for listName in ['Conferences','Speakers','Topics']:
                 try:
                     self.add_dir(thumb,{'Title':listName},{'name':listName,'mode':7,'submode':1},self.gcfanart)
                 except:
@@ -302,12 +355,12 @@ class LDSORG(Plugin):
             for session in sessions:
                 soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
                 # If we're dealing with a session - see if there's a "full session" option
-                if is_session: 
-                    if sessionName != soup.find('span').getText().replace('&#x27;',"'"): 
+                if is_session:
+                    if sessionName != soup.find('span').getText().replace('&#x27;',"'"):
                         continue
                     elif soup.find(text=sessionName.replace("'",'&#x27;')).parent.parent.parent.find(text="Download Video"):
-                        self.add_dir(thumb,{'Title':sessionName},{'name':sessionName +" - Full Session",'url':url,'mode':7,'submode':4},thumb)                   
-                for div in soup.findAll('div',{'class':re.compile('lumen-tile lumen-tile--horizontal lumen-tile--list.*')}):              
+                        self.add_dir(thumb,{'Title':sessionName},{'name':sessionName +" - Full Session",'url':url,'mode':7,'submode':4},thumb)
+                for div in soup.findAll('div',{'class':re.compile('lumen-tile lumen-tile--horizontal lumen-tile--list.*')}):
                     media_uri = div.a['href']
                     u = self.baseUrl + media_uri
                     try:
@@ -329,7 +382,7 @@ class LDSORG(Plugin):
                     args_list.append((thumb,{'Title':name},{'name':name,'url':u,'mode':7,'submode':4},thumb))
             for args in args_list:
                 self.add_dir(*args)
-        elif submode == 4: 
+        elif submode == 4:
             data = make_request(url)
             # For some reason BeautifulSoup doesn't parse the sessions properly
             session_tag = '<div class="section tile-wrapper layout--3 lumen-layout__item">'
@@ -339,7 +392,7 @@ class LDSORG(Plugin):
             for session in sessions:
                 soup = BeautifulSoup(session_tag + session, convertEntities=BeautifulSoup.HTML_ENTITIES)
                 if is_session:
-                    if sessionName.replace(' - Full Session','') == soup.find('span').getText().replace('&#x27;',"'"): 
+                    if sessionName.replace(' - Full Session','') == soup.find('span').getText().replace('&#x27;',"'"):
                         break
             if soup:
                 if not is_session:
@@ -357,7 +410,7 @@ class LDSORG(Plugin):
                     elif name == "Talks and Music":
                         continue
                     u = i['href']
-                    self.add_link(thumb,{'Title':title,'Plot':description},{'name':name,'url':u,'mode':5},thumb)                
+                    self.add_link(thumb,{'Title':title,'Plot':description},{'name':name,'url':u,'mode':5},thumb)
     def get_featured(self):
         url = 'http://www.lds.org/media-library/video?lang=eng'
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
@@ -487,4 +540,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

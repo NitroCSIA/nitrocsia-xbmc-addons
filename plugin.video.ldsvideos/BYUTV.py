@@ -100,7 +100,7 @@ class BYUTV(Plugin):
                 self.add_link(thumb,{'Title':item['subtitle'],
                                          'Plot':item['description'],
                                          'TVShowTitle':item['title'],
-                                    },newitem,fanart)
+                                    },newitem,fanart,"video",True)
 
 
     def get_live(self):
